@@ -39,7 +39,7 @@ Terminal-based interface for retrieving and decoding pH, temperature, and slope 
 
 ### lcd_interface.py
 
-LCD-based user interface featuring menu navigation, calibration workflows, and real-time measurement display.
+LCD-based interface for the Sentron ISFET Evaluation Kit featuring rotary encoder navigation, guided calibration workflows, and real-time pH/temperature display.
 
 ### docs/
 
