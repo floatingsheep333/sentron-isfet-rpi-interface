@@ -99,7 +99,34 @@ According to the Sentron documentation, calibration slopes between consecutive b
 
 ## Raspberry Pi + LCD Interface
 
-Run:
+### Python Dependencies
+
+Required packages:
+
+```bash
+pip install pyserial
+pip install SMlcd
+```
+
+### LCD Library
+
+The LCD interface was developed using the Sequent Microsystems LCD adapter library:
+
+https://github.com/SequentMicrosystems/sm_lcd_rpi
+
+### Serial Port Configuration
+
+Verify that the serial port specified in `LCD_interface.py` matches the Sentron USB interface connected to the Raspberry Pi.
+
+Example:
+
+```bash
+ls /dev/ttyUSB*
+```
+
+Update the serial port variable if necessary before execution.
+
+### Run
 
 ```bash
 python LCD_interface.py
