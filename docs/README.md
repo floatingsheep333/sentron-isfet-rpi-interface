@@ -19,7 +19,6 @@ For assembly instructions, communication protocol details, calibration procedure
 ### Sentron Evaluation Hardware
 
 * Connect the ISFET sensor, reference electrode, Analog Front-End, and AD Converter according to the Sentron documentation.
-* Clean the sensor and reference electrode before calibration.
 
 ### Photos
 
@@ -37,9 +36,7 @@ For assembly instructions, communication protocol details, calibration procedure
 
 The Sentron Evaluation Kit requires installation of the appropriate VCP (Virtual COM Port) drivers.
 
-Refer to the Sentron Evaluation Kit documentation for the correct driver package for your operating system.
-
-(Driver links to be added)
+[FTDI Virtual COM Port (VCP) Drivers](https://ftdichip.com/drivers/vcp-drivers/)
 
 ---
 
