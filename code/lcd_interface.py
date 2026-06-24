@@ -1,17 +1,8 @@
 """
-Sentron ISFET Evaluation Kit LCD Interface
 
 This script provides an LCD-based user interface for operating the
 Sentron ISFET pH Evaluation Kit using a Raspberry Pi 5 and the
 Sequent Microsystems Six-in-One LCD Adapter Kit.
-
-Features:
-- Rotary encoder menu navigation
-- Multi-point calibration workflow
-- Real-time pH display
-- Real-time temperature display
-- LCD-guided calibration process
-- Serial communication with Sentron evaluation hardware
 
 Controls:
 SW1 = Calibration menu
