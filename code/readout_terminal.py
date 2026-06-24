@@ -1,9 +1,4 @@
 """
-Sentron ISFET Evaluation Kit Readout Utility
-
-This script provides a terminal-based interface for retrieving
-pH, temperature, and slope values from the Sentron ISFET pH
-Evaluation Kit.
 
 Functions:
     - Retrieve and decode pH readings
