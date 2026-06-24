@@ -1,9 +1,4 @@
 """
-Sentron ISFET Evaluation Kit Calibration Utility
-
-This script implements a terminal-based interface for
-calibration of the Sentron ISFET pH Evaluation Kit.
-
 Functions:
     - Initiate calibration
     - Calibrate pH 4, pH 7, pH 10 points
