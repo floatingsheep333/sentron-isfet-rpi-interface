@@ -1,4 +1,8 @@
 """
+Sentron ISFET Multi-Point pH Calibration
+"""
+
+"""
 Functions:
     - Initiate calibration
     - Calibrate pH 4, pH 7, pH 10 points
@@ -32,12 +36,30 @@ import sys
 # Raspberry Pi / Linux:
 #   ls /dev/ttyUSB*
 PORT = "/dev/cu.usbserial-FTE868J4"
-
 # Baud rate specified by the Sentron Evaluation Kit documentation.
 BAUD = 115200
 
-# Sentron calibration commands.
-#
+
+# =========================
+# FORMATTING
+# =========================
+
+RESET = "\033[0m"
+BOLD = "\033[1m"
+
+CYAN = "\033[96m"
+WHITE = "\033[97m"
+YELLOW = "\033[93m"
+MAGENTA = "\033[95m"
+
+LINE = "─" * 60
+THICK_LINE = "═" * 60
+
+
+# =========================
+# SENTRON COMMANDS
+# =========================
+
 # Each command entry includes:
 #   cmd      = command sent to the module
 #   expected = expected decimal byte response
@@ -49,61 +71,119 @@ COMMANDS = {
     "initiate": {
         "cmd": "CLR",
         "expected": "082 013 010",
-        "success": "Ready for first calibration point.",
         "timeout": 10,
     },
     "4": {
         "cmd": "112",
         "expected": "002 013 010",
-        "success": "pH 4 calibrated.",
         "timeout": 120,
     },
     "7": {
         "cmd": "113",
         "expected": "003 013 010",
-        "success": "pH 7 calibrated.",
         "timeout": 120,
     },
     "10": {
         "cmd": "114",
         "expected": "004 013 010",
-        "success": "pH 10 calibrated.",
         "timeout": 120,
     },
     "complete": {
         "cmd": "QIT",
         "expected": "084 013 010",
-        "success": "Calibration completed.",
         "timeout": 10,
     },
 }
+
+
+# =========================
+# DISPLAY HELPERS
+# =========================
+
+def title(text):
+    print(f"\n{BOLD}{CYAN}{THICK_LINE}")
+    print(text.center(60))
+    print(f"{THICK_LINE}{RESET}\n")
+
+
+def section(text):
+    print(f"\n{BOLD}{CYAN}{LINE}")
+    print(text)
+    print(f"{LINE}{RESET}")
+
+
+def operation(text):
+    print(f"\n{CYAN}{text}{RESET}\n")
+
+
+def success(text):
+    print(f"{MAGENTA}✓ {text}{RESET}")
+
+
+def warning(text):
+    print(f"{MAGENTA}✗ {text}{RESET}")
 
 
 def decimal_bytes(data):
     """
     Convert raw bytes returned by the Sentron module into
     zero-padded decimal byte strings.
-
-    Example:
-        b'R\\r\\n'
-
-    becomes:
-        "082 013 010"
-
-    This format matches the response format used in the
-    Sentron protocol documentation.
     """
     return " ".join(f"{b:03d}" for b in data)
 
 
-def wait_for_response(ser, expected, timeout):
-    """
-    Wait for the Sentron module to return a response.
+# =========================
+# SCREENS
+# =========================
 
-    Returns True if the received decimal byte sequence matches
-    the expected response. Returns False if the response is
-    unexpected or no response is received before the timeout.
-    """
+def startup_screen():
+    title("SENTRON ISFET pH CALIBRATION")
+    print(f"{WHITE}Serial connection opened{RESET}")
+    print(f"{WHITE}Port:{RESET}      {YELLOW}{PORT}{RESET}")
+    print(f"{WHITE}Baud rate:{RESET} {YELLOW}{BAUD}{RESET}\n")
+
+
+def show_setup_screen():
+    section("CALIBRATION SETUP")
+
+    print(f"{WHITE}• Rinse the probe with demineralized water.{RESET}")
+    print(f"{WHITE}• Place ISFET sensor and reference electrode in the first calibration buffer solution.{RESET}")
+    print(f"{WHITE}• For 2-point calibration: pH 4→7 or pH 7→10.{RESET}")
+    print(f"{WHITE}  For 3-point calibration: pH 4→7→10 or pH 10→7→4.{RESET}\n")
+
+
+def show_main_menu():
+    section("MAIN MENU")
+
+    print(f"{WHITE}i{RESET}    Initiate calibration mode")
+    print(f"{WHITE}q{RESET}    Complete calibration and save")
+    print(f"{WHITE}x{RESET}    Exit without completing calibration")
+    print()
+
+
+def show_calibration_menu():
+    section("CALIBRATION MENU")
+
+    print(f"{WHITE}4{RESET}     pH 4 calibration")
+    print(f"{WHITE}7{RESET}     pH 7 calibration")
+    print(f"{WHITE}10{RESET}    pH 10 calibration")
+    print(f"{WHITE}q{RESET}     End calibration and save")
+    print(f"{WHITE}x{RESET}     Exit without saving")
+    print()
+
+
+def buffer_instruction(choice):
+    operation(f"pH {choice} calibration")
+
+    print(f"{WHITE}Confirm ISFET sensor and reference electrode are in pH {choice} buffer.{RESET}\n")
+    input(f"{CYAN}Press Enter to send pH {choice} command...{RESET}")
+
+
+# =========================
+# SERIAL FUNCTIONS
+# =========================
+
+def wait_for_response(ser, expected, timeout):
     start = time.time()
 
     while True:
@@ -113,34 +193,51 @@ def wait_for_response(ser, expected, timeout):
             data = ser.read(ser.in_waiting)
             received = decimal_bytes(data)
 
-            print("Received decimal bytes:", received)
+            print()
+            print(f"{WHITE}Received:{RESET}   {YELLOW}{received}{RESET}")
 
             if received == expected:
-                print("Match = yes!")
+                print(f"{WHITE}Verify:{RESET}     {MAGENTA}✓ PASSED{RESET}\n")
                 return True
             else:
-                print("Match = no!")
+                print(f"{WHITE}Verify:{RESET}     {MAGENTA}✗ FAILED{RESET}")
+                print(f"{WHITE}Expected:{RESET}   {YELLOW}{expected}{RESET}\n")
                 return False
 
         if elapsed >= timeout:
-            print("\nNo response received before timeout.")
+            print()
+            warning("No response received before timeout.")
             return False
 
-        sys.stdout.write(f"\rWaiting... {elapsed}/{timeout} seconds")
+        sys.stdout.write(
+            f"\r{WHITE}Waiting...{RESET}  {MAGENTA}{elapsed}/{timeout} s{RESET}"
+        )
         sys.stdout.flush()
         time.sleep(1)
 
 
 def send_step(ser, key):
-    
     info = COMMANDS[key]
     full_cmd = f"{info['cmd']}!\r".encode()
 
-    print("Expected decimal bytes:", info["expected"])
+    if key == "initiate":
+        operation("Starting calibration...")
+    elif key == "complete":
+        operation("Ending calibration...")
+    else:
+        operation(f"Starting pH {key} calibration...")
+
+    print(f"{WHITE}Command:{RESET}    {YELLOW}{info['cmd']}!<CR>{RESET}")
+    print(f"{WHITE}Expected:{RESET}   {YELLOW}{info['expected']}{RESET}")
+    print(f"{WHITE}Timeout:{RESET}    {MAGENTA}{info['timeout']} s{RESET}\n")
 
     ser.reset_input_buffer()
     ser.write(full_cmd)
     ser.flush()
+
+    if key in ["4", "7", "10"]:
+        print(f"{WHITE}Allow time for the module to stabilize.{RESET}")
+        print(f"{WHITE}This may take up to 2 minutes maximum.{RESET}\n")
 
     ok = wait_for_response(
         ser,
@@ -149,99 +246,76 @@ def send_step(ser, key):
     )
 
     if ok:
-        print("Result:", info["success"])
+        if key == "initiate":
+            success("Calibration mode active.")
+        elif key == "complete":
+            success("Calibration completed.")
+        else:
+            success(f"pH {key} calibration completed.")
     else:
-        print("Result: response missing or unexpected.")
+        warning("Protocol verification failed.")
 
+    print()
     return ok
 
 
-def show_main_menu():
- 
-    print("\nMenu :)")
-    print("i = initiate calibration")
-    print("q = complete calibration")
-    print("x = exit script without completing")
-    print("")
-    print("--> Rinse the probe with demineralized water.")
-    print("--> Place ISFET sensor and reference electrode in the first calibration buffer solution")
-    print("--> pH 4, 7, or 10")
+# =========================
+# MAIN
+# =========================
 
+try:
+    ser = serial.Serial(
+        PORT,
+        BAUD,
+        bytesize=8,
+        parity="N",
+        stopbits=1,
+        timeout=1
+    )
 
-def show_calibration_menu():
-    """
-    Display calibration options after the calibration process
-    has been initiated.
-    """
-    print("\nCalibration options:")
-    print("4 = pH 4 calibration")
-    print("7 = pH 7 calibration")
-    print("10 = pH 10 calibration")
-    print("q = quit calibration / complete")
-    print("i = re-initiate calibration")
-    print("x = exit script without completing")
+    initiated = False
 
+    startup_screen()
+    show_setup_screen()
 
-# Open serial connection to the Sentron Evaluation Kit.
-#
-# Settings are specified by the Sentron protocol:
-#   115200 baud
-#   8 data bits
-#   no parity
-#   1 stop bit
-ser = serial.Serial(
-    PORT,
-    BAUD,
-    bytesize=8,
-    parity="N",
-    stopbits=1,
-    timeout=1
-)
+    while True:
+        if initiated:
+            show_calibration_menu()
+        else:
+            show_main_menu()
 
-# Tracks whether the Sentron module has been placed into
-# calibration mode using the CLR command.
-initiated = False
+        choice = input(f"{BOLD}{CYAN}> {RESET}").strip().lower()
 
-print("Sentron multi-point pH calibration!")
+        if choice == "i":
+            initiated = send_step(ser, "initiate")
 
-while True:
-    if initiated:
-        show_calibration_menu()
-    else:
-        show_main_menu()
+        elif choice in ["4", "7", "10"]:
+            if not initiated:
+                warning("Send CLR first.")
+                continue
 
-    choice = input("\n> ").strip().lower()
+            buffer_instruction(choice)
+            send_step(ser, choice)
 
-    if choice == "i":
-        print("\nInitiating calibration process...")
+        elif choice == "q":
+            send_step(ser, "complete")
+            break
 
-        initiated = send_step(ser, "initiate")
+        elif choice == "x":
+            warning("Exited without QIT.")
+            break
 
-        if not initiated:
-            print("Calibration initiation failed.")
+        else:
+            warning("Unknown command.")
 
-    elif choice in ["4", "7", "10"]:
-        if not initiated:
-            print("You must initiate first. Initiate calibration by typing i.")
-            continue
+except serial.SerialException as e:
+    warning("Could not open serial connection.")
+    print(e)
 
-        input("Press Enter to calibrate.")
-        print("--> Allow module to stabilize. This may take up to 2 minutes max.")
-
-        send_step(ser, choice)
-
-    elif choice == "q":
-        print("\nEnding calibration process!")
-
-        send_step(ser, "complete")
-        break
-
-    elif choice == "x":
-        print("Exiting script without sending QIT.")
-        break
-
-    else:
-        print("Unknown choice.")
-
-ser.close()
-print("Serial closed.")
+finally:
+    try:
+        ser.close()
+        print()
+        success("Serial connection closed.")
+    except NameError:
+        pass
