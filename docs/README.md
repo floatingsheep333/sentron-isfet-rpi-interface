@@ -73,7 +73,7 @@ python calibration_terminal.py
 Notes:
 
 * Follow the prompts displayed in the terminal.
-* Complete calibration using the `QIT` command.
+* Select q after the final calibration point to complete and save the calibration.
 * Calibration values are stored internally by the Sentron hardware after completion.
 
 ### Measurement
@@ -87,7 +87,7 @@ python readout_terminal.py
 Outputs:
 
 * pH value
-* Temperature
+* Temperature (°F/°C)
 * Calibration slope values
 
 According to the Sentron documentation, calibration slopes between consecutive buffer solutions should typically fall between approximately 95% and 105%. Values outside this range may indicate sensor contamination, sensor aging, or reference electrode issues.
