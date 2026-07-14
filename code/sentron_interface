@@ -1,0 +1,805 @@
+"""
+Sentron ISFET pH Interface
+
+Functions:
+    - Multi-point pH calibration
+    - Continuous pH and temperature readout
+    - Scrolling-list and live single-line readout modes
+    - Slope-value retrieval
+    - Menus for switching between calibration and readout
+
+Based on the communication protocol supplied with the
+Sentron Evaluation Kit documentation.
+"""
+
+import serial
+import sys
+import time
+
+# ============================================================
+# SERIAL CONFIGURATION
+# ============================================================
+
+# Serial port used by the Sentron USB interface.
+# This device name may vary between computers and operating systems.
+#
+# Examples:
+#
+# macOS:
+#   /dev/cu.usbserial-FTE868J4
+#
+# Raspberry Pi / Linux:
+#   /dev/ttyUSB0
+#
+# To locate the serial port:
+#
+# macOS:
+#   ls /dev/cu.*
+#
+# Raspberry Pi / Linux:
+#   ls /dev/ttyUSB*
+
+PORT = "/dev/cu.usbserial-FTE868J4"
+BAUD = 115200
+
+# ============================================================
+# DISPLAY FORMATTING
+# ============================================================
+
+RESET = "\033[0m"
+BOLD = "\033[1m"
+
+CYAN = "\033[96m"
+WHITE = "\033[97m"
+YELLOW = "\033[93m"
+MAGENTA = "\033[95m"
+
+LINE = "─" * 60
+THICK_LINE = "═" * 60
+
+
+def title(text):
+    print(f"\n{BOLD}{CYAN}{THICK_LINE}")
+    print(text.center(60))
+    print(f"{THICK_LINE}{RESET}\n")
+
+
+def section(text):
+    print(f"\n{BOLD}{CYAN}{LINE}")
+    print(text)
+    print(f"{LINE}{RESET}")
+
+
+def operation(text):
+    print(f"\n{CYAN}{text}{RESET}\n")
+
+
+def success(text):
+    print(f"{MAGENTA}✓ {text}{RESET}")
+
+
+def warning(text):
+    print(f"{MAGENTA}✗ {text}{RESET}")
+
+
+def decimal_bytes(data):
+    """
+    Convert raw bytes into zero-padded decimal byte strings.
+    """
+    return " ".join(f"{byte:03d}" for byte in data)
+
+
+def pause():
+    input(f"\n{CYAN}Press Enter to continue...{RESET}")
+
+
+# ============================================================
+# SENTRON CALIBRATION COMMANDS
+# ============================================================
+
+COMMANDS = {
+    "initiate": {
+        "cmd": "CLR",
+        "expected": bytes([82, 13, 10]),
+        "timeout": 10,
+    },
+    "4": {
+        "cmd": "112",
+        "expected": bytes([2, 13, 10]),
+        "timeout": 120,
+    },
+    "7": {
+        "cmd": "113",
+        "expected": bytes([3, 13, 10]),
+        "timeout": 120,
+    },
+    "10": {
+        "cmd": "114",
+        "expected": bytes([4, 13, 10]),
+        "timeout": 120,
+    },
+    "complete": {
+        "cmd": "QIT",
+        "expected": bytes([84, 13, 10]),
+        "timeout": 10,
+    },
+}
+
+
+# ============================================================
+# READOUT DECODING
+# ============================================================
+
+def decode_ph(data):
+    """
+     Decode pH from the Sentron pH response.
+     Protocol format:
+         pH command returns bytes A B C D E F G H I J K
+         pH = A*4096 + B*64 + C, units = 0.001 pH
+     """
+
+    if len(data) < 3:
+        return None
+
+    a, b, c = data[0], data[1], data[2]
+    return (a * 4096 + b * 64 + c) / 1000
+
+
+def decode_temp_f(data):
+    # temp command returns A B C D E F G
+    # temp = A*64 + B, (units 0.1 F)
+
+    if len(data) < 2:
+        return None
+
+    a, b = data[0], data[1]
+    return (a * 64 + b) / 10
+
+
+def f_to_c(temp_f):
+    return (temp_f - 32) * 5 / 9
+
+
+def decode_slopes(data):
+    if len(data) < 12:
+        return None
+
+    return {
+        "pH 2-4": (data[1] * 64 + data[2]) / 10,
+        "pH 4-7": (data[4] * 64 + data[5]) / 10,
+        "pH 7-10": (data[7] * 64 + data[8]) / 10,
+        "pH 10-12": (data[10] * 64 + data[11]) / 10,
+    }
+
+
+# ============================================================
+# GENERAL SERIAL FUNCTIONS
+# ============================================================
+
+def read_command(ser, command):
+    """
+    Send a readout command and return the response ending in CR/LF.
+    """
+    ser.reset_input_buffer()
+    ser.write(command)
+    ser.flush()
+
+    return ser.read_until(b"\r\n")
+
+
+def read_ph(ser):
+    data = read_command(ser, b"999!\r")
+
+    # Uncomment for troubleshooting:
+    # print("pH decimal bytes:", decimal_bytes(data))
+
+    return decode_ph(data), data
+
+
+def read_temp(ser):
+    data = read_command(ser, b"777!\r")
+
+    # Uncomment for troubleshooting:
+    # print("Temperature decimal bytes:", decimal_bytes(data))
+
+    temp_f = decode_temp_f(data)
+
+    if temp_f is None:
+        return None, None, data
+
+    temp_c = f_to_c(temp_f)
+    return temp_f, temp_c, data
+
+
+def wait_for_response(ser, expected, timeout):
+    """
+    Wait for a calibration response.
+
+    Incoming bytes are accumulated so that a response arriving in
+    multiple serial chunks is still compared correctly..
+    """
+    start_time = time.monotonic()
+    received_data = bytearray()
+
+    while True:
+        elapsed = time.monotonic() - start_time
+
+        if ser.in_waiting:
+            received_data.extend(ser.read(ser.in_waiting))
+
+            if bytes(received_data) == expected:
+                print()
+                print(
+                    f"{WHITE}Received:{RESET}   "
+                    f"{YELLOW}{decimal_bytes(received_data)}{RESET}"
+                )
+                print(
+                    f"{WHITE}Verify:{RESET}     "
+                    f"{MAGENTA}✓ PASSED{RESET}\n"
+                )
+                return True
+
+            # A complete Sentron response (normally) ends in CR/LF.
+            if received_data.endswith(b"\r\n"):
+                print()
+                print(
+                    f"{WHITE}Received:{RESET}   "
+                    f"{YELLOW}{decimal_bytes(received_data)}{RESET}"
+                )
+                print(
+                    f"{WHITE}Verify:{RESET}     "
+                    f"{MAGENTA}✗ FAILED{RESET}"
+                )
+                print(
+                    f"{WHITE}Expected:{RESET}   "
+                    f"{YELLOW}{decimal_bytes(expected)}{RESET}\n"
+                )
+                return False
+
+        if elapsed >= timeout:
+            print()
+            warning("No response received before timeout.")
+
+            if received_data:
+                print(
+                    f"{WHITE}Partial response:{RESET} "
+                    f"{YELLOW}{decimal_bytes(received_data)}{RESET}"
+                )
+
+            return False
+
+        sys.stdout.write(
+            f"\r{WHITE}Waiting...{RESET}  "
+            f"{MAGENTA}{int(elapsed)}/{timeout} s{RESET}"
+        )
+        sys.stdout.flush()
+        time.sleep(0.1)
+
+
+# ============================================================
+# CALIBRATION FUNCTIONS
+# ============================================================
+
+def send_calibration_step(ser, key):
+    info = COMMANDS[key]
+    full_command = f"{info['cmd']}!\r".encode()
+
+    if key == "initiate":
+        operation("Starting calibration mode...")
+    elif key == "complete":
+        operation("Ending calibration and saving...")
+    else:
+        operation(f"Starting pH {key} calibration...")
+
+    print(
+        f"{WHITE}Command:{RESET}    "
+        f"{YELLOW}{info['cmd']}!<CR>{RESET}"
+    )
+    print(
+        f"{WHITE}Expected:{RESET}   "
+        f"{YELLOW}{decimal_bytes(info['expected'])}{RESET}"
+    )
+    print(
+        f"{WHITE}Timeout:{RESET}    "
+        f"{MAGENTA}{info['timeout']} s{RESET}\n"
+    )
+
+    ser.reset_input_buffer()
+    ser.write(full_command)
+    ser.flush()
+
+    if key in {"4", "7", "10"}:
+        print(f"{WHITE}Allow time for the module to stabilize.{RESET}")
+        print(
+            f"{WHITE}The calibration may take up to two minutes.{RESET}\n"
+        )
+
+    verified = wait_for_response(
+        ser,
+        info["expected"],
+        info["timeout"],
+    )
+
+    if verified:
+        if key == "initiate":
+            success("Calibration mode active.")
+        elif key == "complete":
+            success("Calibration completed and saved.")
+        else:
+            success(f"pH {key} calibration completed.")
+    else:
+        warning("Protocol verification failed.")
+
+    return verified
+
+
+def show_calibration_setup():
+    section("CALIBRATION SETUP")
+
+    print(
+        f"{WHITE}• Rinse the probe with demineralized water.{RESET}"
+    )
+    print(
+        f"{WHITE}• Place the ISFET sensor and reference electrode "
+        f"in the calibration buffer.{RESET}"
+    )
+    print(
+        f"{WHITE}• Two-point examples: pH 4 → 7 or pH 7 → 10.{RESET}"
+    )
+    print(
+        f"{WHITE}• Three-point examples: pH 4 → 7 → 10 "
+        f"or pH 10 → 7 → 4.{RESET}"
+    )
+    print(
+        f"{WHITE}• Use QIT after the final point to save "
+        f"the calibration.{RESET}\n"
+    )
+
+
+def buffer_instruction(choice):
+    operation(f"pH {choice} calibration")
+
+    print(
+        f"{WHITE}Confirm that the ISFET sensor and reference electrode "
+        f"are in pH {choice} buffer.{RESET}\n"
+    )
+
+    input(
+        f"{CYAN}Press Enter to send the pH {choice} command...{RESET}"
+    )
+
+
+def calibration_mode(ser):
+    """
+    Calibration submenu.
+
+    Returns to the main menu after QIT or after selecting Back.
+    """
+    initiated = False
+    calibrated_points = []
+
+    title("SENTRON ISFET pH CALIBRATION")
+    show_calibration_setup()
+
+    while True:
+        section("CALIBRATION MENU")
+
+        if initiated:
+            print(
+                f"{WHITE}Status:{RESET} "
+                f"{MAGENTA}Calibration mode active{RESET}"
+            )
+
+            if calibrated_points:
+                points = ", ".join(
+                    f"pH {point}" for point in calibrated_points
+                )
+                print(
+                    f"{WHITE}Completed points:{RESET} "
+                    f"{YELLOW}{points}{RESET}"
+                )
+        else:
+            print(
+                f"{WHITE}Status:{RESET} "
+                f"{YELLOW}Calibration not initiated{RESET}"
+            )
+
+        print()
+
+        if not initiated:
+            print(f"{YELLOW}i{RESET}     Initiate calibration")
+        else:
+            print(f"{YELLOW}4{RESET}     Calibrate with pH 4 buffer")
+            print(f"{YELLOW}7{RESET}     Calibrate with pH 7 buffer")
+            print(f"{YELLOW}10{RESET}    Calibrate with pH 10 buffer")
+            print(f"{YELLOW}q{RESET}     Complete and save with QIT")
+
+        print(f"{YELLOW}b{RESET}     Back to main menu")
+        print()
+
+        choice = input(f"{BOLD}{CYAN}> {RESET}").strip().lower()
+
+        if choice == "i":
+            if initiated:
+                warning("Calibration mode is already active.")
+            else:
+                initiated = send_calibration_step(ser, "initiate")
+
+        elif choice in {"4", "7", "10"}:
+            if not initiated:
+                warning("Initiate calibration with CLR first.")
+                continue
+
+            buffer_instruction(choice)
+
+            if send_calibration_step(ser, choice):
+                if choice not in calibrated_points:
+                    calibrated_points.append(choice)
+
+        elif choice == "q":
+            if not initiated:
+                warning("Calibration has not been initiated.")
+                continue
+
+            if not calibrated_points:
+                warning("No calibration points have been completed.")
+                continue
+
+            if send_calibration_step(ser, "complete"):
+                initiated = False
+                success("Returning to the main menu.")
+                pause()
+                return
+
+        elif choice == "b":
+            if initiated:
+                warning(
+                    "Calibration mode is still active. Complete it with "
+                    "QIT before returning to readout."
+                )
+
+                print()
+                print(f"{YELLOW}1{RESET}  Stay in calibration")
+                print(
+                    f"{YELLOW}2{RESET}  Send QIT and return to main menu"
+                )
+                print(
+                    f"{YELLOW}3{RESET}  Return without QIT "
+                    f"(not recommended)"
+                )
+                print()
+
+                back_choice = input(
+                    f"{BOLD}{CYAN}> {RESET}"
+                ).strip()
+
+                if back_choice == "1":
+                    continue
+
+                if back_choice == "2":
+                    if send_calibration_step(ser, "complete"):
+                        return
+                    continue
+
+                if back_choice == "3":
+                    warning(
+                        "Returning without QIT. The module may remain "
+                        "in calibration mode."
+                    )
+                    return
+
+                warning("Unknown command.")
+            else:
+                return
+
+        else:
+            warning("Unknown command.")
+
+
+# ============================================================
+# SLOPE DISPLAY
+# ============================================================
+
+def read_and_show_slopes(ser):
+    operation("Retrieving slope values...")
+
+    data = read_command(ser, b"000!\r")
+    slopes = decode_slopes(data)
+
+    section("SLOPE VALUES")
+
+    print(
+        f"{WHITE}• Slopes are calculated between consecutive "
+        f"calibration points.{RESET}"
+    )
+    print(
+        f"{WHITE}• A slope of {MAGENTA}0%{RESET}{WHITE} usually means "
+        f"that fewer than two points exist for that range.{RESET}"
+    )
+    print(
+        f"{WHITE}• Normal slopes are approximately "
+        f"{MAGENTA}95–105%{RESET}{WHITE}.{RESET}\n"
+    )
+
+    if slopes is None:
+        warning("Could not decode slope values.")
+        print(
+            f"{WHITE}Raw response:{RESET} "
+            f"{YELLOW}{decimal_bytes(data)}{RESET}"
+        )
+        return
+
+    print(
+        f"{WHITE}pH 2-4:   {RESET}"
+        f"{MAGENTA}{slopes['pH 2-4']:.1f}%{RESET}"
+    )
+    print(
+        f"{WHITE}pH 4-7:   {RESET}"
+        f"{MAGENTA}{slopes['pH 4-7']:.1f}%{RESET}"
+    )
+    print(
+        f"{WHITE}pH 7-10:  {RESET}"
+        f"{MAGENTA}{slopes['pH 7-10']:.1f}%{RESET}"
+    )
+    print(
+        f"{WHITE}pH 10-12: {RESET}"
+        f"{MAGENTA}{slopes['pH 10-12']:.1f}%{RESET}"
+    )
+
+
+# ============================================================
+# READOUT FUNCTIONS
+# ============================================================
+
+def format_reading(count, ph, temp_f, temp_c):
+    count_text = f"{WHITE}{count:04d}{RESET}"
+
+    if ph is None:
+        ph_text = f"{WHITE}pH:{RESET} {MAGENTA}---{RESET}"
+    else:
+        ph_text = (
+            f"{WHITE}pH:{RESET} "
+            f"{YELLOW}{ph:.3f}{RESET}"
+        )
+
+    if temp_f is None or temp_c is None:
+        temp_text = (
+            f"{WHITE}Temp:{RESET} "
+            f"{MAGENTA}---{RESET}"
+        )
+    else:
+        temp_text = (
+            f"{WHITE}Temp:{RESET} "
+            f"{YELLOW}{temp_f:.1f} °F{RESET}  "
+            f"{MAGENTA}{temp_c:.1f} °C{RESET}"
+        )
+
+    return f"{count_text}     {ph_text}        {temp_text}"
+
+
+def continuous_list_mode(ser):
+    section("SCROLLING READOUT")
+
+    print(f"{WHITE}Each reading prints on a new line.{RESET}")
+    print(
+        f"{WHITE}Press {YELLOW}Ctrl+C{RESET}{WHITE} to stop "
+        f"and return to the menu.{RESET}\n"
+    )
+
+    count = 1
+
+    try:
+        while True:
+            ph, _ = read_ph(ser)
+            temp_f, temp_c, _ = read_temp(ser)
+
+            print(format_reading(count, ph, temp_f, temp_c))
+
+            count += 1
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        print()
+        success("Readout stopped. Returning to readout menu.")
+        time.sleep(0.5)
+
+
+def continuous_update_mode(ser):
+    section("LIVE READOUT")
+
+    print(
+        f"{WHITE}Press {YELLOW}Ctrl+C{RESET}{WHITE} to stop "
+        f"and return to the menu.{RESET}\n"
+    )
+
+    count = 1
+
+    try:
+        while True:
+            ph, _ = read_ph(ser)
+            temp_f, temp_c, _ = read_temp(ser)
+
+            line = format_reading(count, ph, temp_f, temp_c)
+
+            sys.stdout.write("\r" + line + " " * 20)
+            sys.stdout.flush()
+
+            count += 1
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        # Move the cursor to a clean line after the live display.
+        print()
+        success("Readout stopped. Returning to readout menu.")
+        time.sleep(0.5)
+
+
+def single_reading(ser):
+    operation("Taking one reading...")
+
+    ph, ph_data = read_ph(ser)
+    temp_f, temp_c, temp_data = read_temp(ser)
+
+    print(format_reading(1, ph, temp_f, temp_c))
+
+    if ph is None:
+        print(
+            f"\n{WHITE}Raw pH response:{RESET} "
+            f"{YELLOW}{decimal_bytes(ph_data)}{RESET}"
+        )
+
+    if temp_f is None:
+        print(
+            f"{WHITE}Raw temperature response:{RESET} "
+            f"{YELLOW}{decimal_bytes(temp_data)}{RESET}"
+        )
+
+
+def readout_mode(ser):
+    """
+    Readout submenu.
+
+    Ctrl+C inside a continuous readout handled locally & does not terminate program.
+    """
+    while True:
+        title("SENTRON ISFET READOUT")
+
+        print(f"{YELLOW}1{RESET}  Start scrolling readout")
+        print(f"   {WHITE}Print each reading on a new line.{RESET}\n")
+
+        print(f"{YELLOW}2{RESET}  Start live readout")
+        print(
+            f"   {WHITE}Continuously update one terminal line.{RESET}\n"
+        )
+
+        print(f"{YELLOW}3{RESET}  Take one reading")
+        print(
+            f"   {WHITE}Read pH and temperature once.{RESET}\n"
+        )
+
+        print(f"{YELLOW}4{RESET}  Show calibration slopes")
+        print(
+            f"   {WHITE}Retrieve the stored slope values.{RESET}\n"
+        )
+
+        print(f"{YELLOW}b{RESET}  Back to main menu")
+        print()
+
+        choice = input(f"{BOLD}{CYAN}> {RESET}").strip().lower()
+
+        if choice == "1":
+            continuous_list_mode(ser)
+
+        elif choice == "2":
+            continuous_update_mode(ser)
+
+        elif choice == "3":
+            single_reading(ser)
+            pause()
+
+        elif choice == "4":
+            read_and_show_slopes(ser)
+            pause()
+
+        elif choice == "b":
+            return
+
+        else:
+            warning("Unknown command.")
+            time.sleep(0.7)
+
+
+# ============================================================
+# MAIN PROGRAM
+# ============================================================
+
+def main_menu(ser):
+    while True:
+        title("SENTRON ISFET pH INTERFACE")
+
+        print(
+            f"{WHITE}Connected port:{RESET} "
+            f"{YELLOW}{PORT}{RESET}"
+        )
+        print(
+            f"{WHITE}Baud rate:{RESET}      "
+            f"{YELLOW}{BAUD}{RESET}\n"
+        )
+
+        print(f"{YELLOW}1{RESET}  Calibration")
+        print(
+            f"   {WHITE}Initiate, perform, and save a multipoint "
+            f"calibration.{RESET}\n"
+        )
+
+        print(f"{YELLOW}2{RESET}  pH and temperature readout")
+        print(
+            f"   {WHITE}Start and stop continuous measurements.{RESET}\n"
+        )
+
+        print(f"{YELLOW}3{RESET}  Show calibration slopes")
+        print(
+            f"   {WHITE}Retrieve the currently stored slopes.{RESET}\n"
+        )
+
+        print(f"{YELLOW}x{RESET}  Exit program")
+        print()
+
+        choice = input(f"{BOLD}{CYAN}> {RESET}").strip().lower()
+
+        if choice == "1":
+            calibration_mode(ser)
+
+        elif choice == "2":
+            readout_mode(ser)
+
+        elif choice == "3":
+            read_and_show_slopes(ser)
+            pause()
+
+        elif choice == "x":
+            success("Exiting program.")
+            return
+
+        else:
+            warning("Unknown command.")
+            time.sleep(0.7)
+
+
+def main():
+    ser = None
+
+    try:
+        ser = serial.Serial(
+            PORT,
+            BAUD,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout=2,
+        )
+
+        # Give the USB serial interface a moment to settle..
+        time.sleep(0.5)
+        ser.reset_input_buffer()
+
+        main_menu(ser)
+
+    except serial.SerialException as error:
+        print()
+        warning("Could not open or use the serial connection.")
+        print(error)
+
+    except KeyboardInterrupt:
+        print()
+        warning("Program stopped by user.")
+
+    finally:
+        if ser is not None and ser.is_open:
+            ser.close()
+            print()
+            success("Serial connection closed.")
+
+
+if __name__ == "__main__":
+    main()
