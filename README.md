@@ -47,7 +47,7 @@ The project includes a terminal-based interface for calibration and measurement,
 
 ## Repository Contents
 
-### 'code/sentron_interface.py'
+### `code/sentron_interface.py`
 
 Combined terminal interface providing:
 
@@ -57,7 +57,7 @@ Combined terminal interface providing:
 * Interactive terminal menus for switching between calibration and measurement modes
 
 
-### 'code/lcd_interface.py'
+### `code/lcd_interface.py`
 
 LCD-based interface featuring rotary encoder navigation, guided calibration workflows, and real-time pH and temperature display.
 
@@ -67,7 +67,7 @@ Setup notes, hardware references, photos, and usage documentation.
 
 ### stl/
 
-3D-printable enclosure and mounting components.
+3D-printable enclosures and mounting components.
 
 ---
 
