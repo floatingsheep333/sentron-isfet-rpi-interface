@@ -2,16 +2,32 @@
 
 ## Overview
 
-This repository contains software, hardware designs, and supporting documentation developed for interfacing the Sentron ISFET pH Evaluation Kit with a Raspberry Pi 5.
+This repository contains software, hardware designs, and supporting documentation for interfacing the Sentron ISFET pH Evaluation Kit with a Raspberry Pi 5.
 
-The project includes terminal-based and LCD-based interfaces for calibration and measurement, protocol decoding for pH, temperature, and slope retrieval, and supporting enclosure designs.
+The project includes a terminal-based interface for calibration and measurement, an LCD-based user interface, protocol decoding for pH, temperature, and calibration slope retrieval, and supporting enclosure designs.
+
+## Screenshots
+
+### Complete System
+
+*rasp pi 5 enclosure with isfet enclosure photo to be added...*
+
+*Complete Raspberry Pi 5 interface consisting of the Sentron ISFET Evaluation Kit, Raspberry Pi 5, custom 3D-printed enclosures, LCD display, and rotary encoder.*
+
+### Terminal Interface
+
+*(screenshot to be added....)*
+
+*Interactive terminal interface*
 
 ## Features
 
-* Serial communication with the Sentron ISFET Evaluation Kit
-* Protocol decoding for pH, temperature, and slope values
-* Terminal-based calibration workflow
-* Terminal-based measurement interface
+* Serial communication with the Sentron ISFET pH Evaluation Kit
+* Multi-point pH calibration 
+* Real-time pH measurement
+* Temperature measurement
+* Calibration slope retrieval and decoding
+* Terminal-based user interface
 * LCD-based user interface with rotary encoder navigation
 * Embedded Raspberry Pi 5 operation
 * Supporting enclosure and mounting hardware designs
@@ -20,10 +36,10 @@ The project includes terminal-based and LCD-based interfaces for calibration and
 
 * Raspberry Pi 5
 * Sentron R&D pH Evaluation Kit
-
   * Analog Front-End
   * AD Converter
-  * ISFET pH Sensor + Reference Electrode
+  * ISFET pH Sensor
+  * Reference Electrode
   * USB Interface
 * Sequent Microsystems Six-in-One LCD Adapter Kit (2004 or 1602 LCD Display)
 
@@ -31,17 +47,19 @@ The project includes terminal-based and LCD-based interfaces for calibration and
 
 ## Repository Contents
 
-### code/calibration_terminal.py
+### 'code/sentron_interface.py'
 
-Terminal-based calibration workflow implementing the Sentron calibration protocol.
+Combined terminal interface providing:
 
-### code/readout_terminal.py
+* Multi-point calibration
+* Continuous pH and temperature readout
+* Calibration slope retrieval
+* Interactive terminal menus for switching between calibration and measurement modes
 
-Terminal-based interface for retrieving and decoding pH, temperature, and calibration slope values.
 
-### code/lcd_interface.py
+### 'code/lcd_interface.py'
 
-LCD-based interface featuring rotary encoder navigation, guided calibration workflows, and real-time measurement display.
+LCD-based interface featuring rotary encoder navigation, guided calibration workflows, and real-time pH and temperature display.
 
 ### docs/
 
@@ -56,12 +74,12 @@ Setup notes, hardware references, photos, and usage documentation.
 ## Future Work
 
 * Characterization curves for ionic strength effects on pH readings
-* Data logging and export functionality
+* CSV data logging and export
 * Measurement history and trend visualization
-* Additional sensor characterization tools
+* Additional ISFET sensor characterization tools
 
 ## Notes
 
-This repository is intended as a companion software interface for the Sentron ISFET pH Evaluation Kit.
+This repository provides a companion software interface for the Sentron ISFET pH Evaluation Kit.
 
-The implementation is based on the communication protocol and documentation supplied with the evaluation hardware.
+The implementation is based on the communication protocol and documentation supplied with the Sentron Evaluation Kit.
