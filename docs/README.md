@@ -67,28 +67,32 @@ Update the serial port variable in the Python scripts before execution.
 Run:
 
 ```bash
-python calibration_terminal.py
+python sentron_interface.py
 ```
 
 Notes:
 
+The terminal interface provides an interactive menu for:
+
+* Multi-point pH calibration
+* Real-time pH and temperature measurement
+* Calibration slope retrieval
+
+### Calibration
+
 * Follow the prompts displayed in the terminal.
-* Select q after the final calibration point to complete and save the calibration.
-* Calibration values are stored internally by the Sentron hardware after completion.
+* Complete calibration using the desired buffer sequence.
+* Select **q** after the final calibration point to send the **QIT** command and save the calibration.
+* Calibration values are stored internally by the Sentron Evaluation Kit after completion.
 
 ### Measurement
 
-Run:
+The measurement interface supports:
 
-```bash
-python readout_terminal.py
-```
-
-Outputs:
-
-* pH value
-* Temperature (°F/°C)
-* Calibration slope values
+* Continuous pH measurement
+* Temperature display (°F/°C)
+* Calibration slope retrieval
+* Scrolling-list and live readout modes
 
 According to the Sentron documentation, calibration slopes between consecutive buffer solutions should typically fall between approximately 95% and 105%. Values outside this range may indicate sensor contamination, sensor aging, or reference electrode issues.
 
@@ -126,7 +130,7 @@ Update the serial port variable if necessary before execution.
 ### Run
 
 ```bash
-python LCD_interface.py
+python lcd_interface.py
 ```
 
 The LCD interface provides:
