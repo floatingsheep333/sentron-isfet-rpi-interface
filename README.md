@@ -4,7 +4,7 @@
 
 This repository contains software, hardware designs, and supporting documentation for interfacing the Sentron ISFET pH Evaluation Kit with a Raspberry Pi 5.
 
-The project includes a terminal-based interface for calibration and measurement, an LCD-based user interface, protocol decoding for pH, temperature, and calibration slope retrieval, and supporting enclosure designs.
+The project includes a terminal-based interface for calibration and measurement, an LCD-based user interface, protocol decoding for pH, temperature, and calibration slope retrieval, and supporting enclosure designs. 
 
 ## Screenshots
 
@@ -63,7 +63,7 @@ LCD-based interface featuring rotary encoder navigation, guided calibration work
 
 ### docs/
 
-Setup notes, hardware references, photos, and usage documentation.
+Supporting documentation, setup instructions, hardware references, and project photos.
 
 ### stl/
 
