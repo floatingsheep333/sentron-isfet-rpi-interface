@@ -18,7 +18,7 @@ The project includes a terminal-based interface for calibration and measurement,
 
 ### Terminal Interface
 
-<img src="images/main_menu_screenshot.png" width="650">
+<img src="images/calibration_menu_screenshot.png" width="650">
 
 *Interactive terminal interface*
 
