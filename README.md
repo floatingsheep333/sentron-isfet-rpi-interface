@@ -12,14 +12,14 @@ The project includes a terminal-based interface for calibration and measurement,
 
 ### Complete System
 
-*rasp pi 5 enclosure with isfet enclosure photo to be added...*
+![Complete System](images/complete_system.png
 
 *Complete Raspberry Pi 5 interface consisting of the Sentron ISFET Evaluation Kit, Raspberry Pi 5, custom 3D-printed enclosures, LCD display, and rotary encoder.*
 
 ### Terminal Interface
 
-*(screenshot to be added....)*
-
+![Main Menu](images/main_menu_screenshot.png)
+![Calibration Menu](images/calibration_menu_screenshot.png)
 *Interactive terminal interface*
 
 ## Features
