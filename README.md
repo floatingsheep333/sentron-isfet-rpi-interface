@@ -2,6 +2,14 @@
 
 # Sentron ISFET pH Evaluation Kit Raspberry Pi Interface
 
+![Python](https://img.shields.io/badge/Python-3-blue)
+
+![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi%205-red)
+
+![Sensor](https://img.shields.io/badge/Sensor-Sentron%20ISFET-green)
+
+![Interface](https://img.shields.io/badge/Communication-Serial%20115200-orange)
+
 ## Overview
 
 This repository contains software, hardware designs, and supporting documentation for interfacing the Sentron ISFET pH Evaluation Kit with a Raspberry Pi 5.
