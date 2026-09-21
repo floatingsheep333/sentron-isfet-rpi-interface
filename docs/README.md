@@ -24,11 +24,11 @@ For assembly instructions, communication protocol details, calibration procedure
 
 #### Raspberry Pi + LCD Assembly
 
-![Raspberry Pi and LCD assembly](full_system_setup_covers.png)
+![Raspberry Pi and LCD assembly](images/full_system_setup_covers.png)
 
 #### Sentron Evaluation Kit Connections
 
-![Evaluation Kit connections](complete_system.png)
+![Evaluation Kit connections](images/complete_system.png)
 
 ---
 
